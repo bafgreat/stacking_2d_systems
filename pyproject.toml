@@ -1,14 +1,18 @@
 [tool.poetry]
 name = "stacking-2d-systems"
 version = "0.1.0"
-description = ""
-authors = ["bafgreat <75862753+bafgreat@users.noreply.github.com>"]
+description = "A python package for creating stack layers of 2D systems."
+authors = ["Dinga Wonanke <bafgreat@gmail.com>"]
 readme = "README.md"
+keywords = ["2D materials", "stacking", "AA stacking", "AB stacking", "slip stacking", "COFs", "crystal structures", "Graphene"]
+license = { text = "MIT"}
 
 [tool.poetry.dependencies]
 python = "^3.9"
 ase = "^3.23.0"
 pytest = "^8.3.3"
+
+
 
 
 [build-system]

@@ -144,3 +144,6 @@ To have full control over the stacking process, the CreateStack class can be use
 ## Contact
 
 If you have any questions or need further help, feel free to contact the project maintainer at `bafgreat@gmail.com`.
+
+## License
+MIT License
