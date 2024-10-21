@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "stacking-2d-systems"
+version = "0.1.0"
+description = ""
+authors = ["bafgreat <75862753+bafgreat@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+ase = "^3.23.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
