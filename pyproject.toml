@@ -8,8 +8,13 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 ase = "^3.23.0"
+pytest = "^8.3.3"
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+create-stack = "stacking_2d_systems.cli:main"
+

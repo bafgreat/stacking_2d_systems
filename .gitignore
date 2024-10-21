@@ -1,0 +1,4 @@
+.pyenv/
+poetry.lock
+.history/
+stacking_2d_systems/__pycache__/
