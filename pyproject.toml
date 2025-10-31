@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "stacking-2d-systems"
-version = "0.1.0"
+version = "0.1.1"
 description = "A python package for creating stack layers of 2D systems."
 authors = ["Dinga Wonanke <bafgreat@gmail.com>"]
 readme = "README.md"
 keywords = ["2D materials", "stacking", "AA stacking", "AB stacking", "slip stacking", "COFs", "crystal structures", "Graphene"]
-license = { text = "MIT"}
+license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.9"

@@ -18,7 +18,7 @@ def main():
     parser.add_argument(
         "--interlayer-dist",
         type=float,
-        default=3.2,
+        default=4.2,
         help="Distance between layers in the bilayer structure. Default is 3.2 Angstroms."
     )
     parser.add_argument(

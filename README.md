@@ -1,38 +1,46 @@
 # stacking_2d_systems
-**stacking_2d_systems** is a Python package designed to create different stacking configurations of 2D systems. It allows users to easily generate various configurations of 2D materials, such as AA and AB stacking, and custom translations along the x, y, or xy directions. This package is particularly useful for researchers working with Powder X-ray Diffraction (PXRD) data, helping to match structures and explore different stacking patterns.
+
+**stacking_2d_systems** is a Python package designed to create different stacking configurations of 2D systems. It allows users to easily generate various configurations of 2D materials — such as **AA** and **AB** stacking — and apply **custom translations** along the *x*, *y*, or *xy* directions.
+
+This package is especially useful for researchers who wish to create different stacking arrangement to match experimental **Powder X-ray Diffraction (PXRD)** with different stacking patterns of computationally generated structures.
+
+---
 
 ## Features
 
-- **AB and AA Stacking**:
-    Generate AB- and AA-stacked bilayer structures from a monolayer input file.
-- **Custom Translations**:
-    Create slip-stacked configurations by translating the second layer along the x, y, or xy directions.
-- **Batch Generation**:
-    Automatically generate all possible stacking configurations with a single command.
-- **User-Friendly CLI**:
-    Easily generate stacking configurations without needing to write any Python code.
-- **Flexible Library**:
-    Use `CreateStack` in Python scripts for more control and custom workflows.
+- **AB and AA Stacking**
+  Generate AB- and AA-stacked bilayer structures from a single monolayer input file.
+
+- **Custom Translations**
+  Create slip-stacked configurations by translating the second layer along the x, y, or xy directions.
+
+- **Batch Generation**
+  Automatically generate all possible stacking configurations with one command.
+
+- **User-Friendly CLI**
+  Generate stacking configurations directly from the terminal — no Python coding required.
+
+- **Flexible Python Library**
+  Use the `CreateStack` class in your Python scripts for full control and integration into custom workflows.
 
 ## Installation
 
 ### From PyPI
 
-The package can be installed from PYPI as follows:
+Install directly from [PyPI](https://pypi.org/project/stacking_2d_systems):
 
-```bash
-pip install stacking_2d_systems
-```
+    ```bash
+        pip install stacking_2d_systems
+    ```
 
 ### From GitHub
 
-To get the latest version or contribute to the development, you can install directly from GitHub:
+    ```bash
 
-```bash
-git clone https://github.com/bafgreat/stacking_2d_systems.git
-cd stack_2d_systems
-pip install .
-```
+        git clone https://github.com/bafgreat/stacking_2d_systems.git
+        cd stacking_2d_systems
+        pip install .
+    ```
 
 ## Usage
 
@@ -40,9 +48,9 @@ pip install .
 
 The stacking_2d_systems package provides a user-friendly command-line tool called create-stack for generating stacking configurations without needing to write Python code.
 
-```bash
-create-stack path/to/monolayer.cif --stacking <type> [options]
-```
+    ```bash
+        create-stack path/to/monolayer.cif --stacking <type> [options]
+    ```
 
 #### Available Options
 
@@ -70,13 +78,14 @@ create-stack path/to/monolayer.cif --stacking <type> [options]
 
 1. Generate AB Stacking
 
-    ```bash
-    create-stack path/to/monolayer.cif --stacking ab
-    ```
+        ```bash
+            create-stack path/to/monolayer.cif --stacking ab
+        ```
+
 if you wish to that the stack files should written in a particular directory
 
     ```bash
-    create-stack path/to/monolayer.cif --stacking ab --output-dir path/to/output
+        create-stack path/to/monolayer.cif --stacking ab --output-dir path/to/output
     ```
 
 2. Generate AA Stacking
@@ -89,17 +98,17 @@ if you wish to that the stack files should written in a particular directory
 To translate the second layer along the x-axis with a maximum translation length of 5.0 Angstroms:
 
     ```bash
-    create-stack path/to/monolayer.cif --stacking x --max-length 5.0
+        create-stack path/to/monolayer.cif --stacking x --max-length 5.0
     ```
 
 This code will generate a series of files like monolayer_x_0.5.cif, monolayer_x_1.0.cif, etc.
 
-4. Generate All Stacking Configurations
+4.Generate All Stacking Configurations
 To automatically create AB, AA, and all custom translations along x, y, and xy
 
-    ```bash
-        create-stack path/to/monolayer.cif --stacking all
-    ```
+        ```bash
+            create-stack path/to/monolayer.cif --stacking all
+        ```
 
 This code will generate all stacking configurations. At the maximum length for the custom translations will be half the size of the lattice length. i.e for translation along x, the maximum length is a/2.0 and b/2.0 along y and a+b/2.0 for xy.
 
@@ -107,7 +116,8 @@ This code will generate all stacking configurations. At the maximum length for t
 
 To have full control over the stacking process, the CreateStack class can be used directly in Python scripts.
 
-    ```python
+    ```Python
+
     from stacking_2d_systems.slip_layers import CreateStack
 
     # Initialize the stack with a monolayer structure and interlayer distance
@@ -140,10 +150,10 @@ To have full control over the stacking process, the CreateStack class can be use
 - stack_along_xy(max_length):
     Generates a series of xy-diagonal translated structures.
 
-
 ## Contact
 
 If you have any questions or need further help, feel free to contact the project maintainer at `bafgreat@gmail.com`.
 
 ## License
+
 MIT License

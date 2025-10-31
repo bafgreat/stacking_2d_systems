@@ -2,3 +2,6 @@
 poetry.lock
 .history/
 stacking_2d_systems/__pycache__/
+.DS_Store
+.vscode/
+dist/

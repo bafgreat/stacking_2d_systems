@@ -31,7 +31,7 @@ class CreateStack:
             The length of the unit cell along the z-axis.
     """
 
-    def __init__(self, filename, interlayer_dist=3.2, output_dir="."):
+    def __init__(self, filename, interlayer_dist=4.5, output_dir="."):
         """
         Initializes the CreateStack object by reading the monolayer structure,
         creating a bilayer, and setting up necessary parameters.
