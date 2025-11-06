@@ -30,7 +30,7 @@ def optimize_with_gulp(
     gulp_exe = os.path.expandvars("$HOME/src/gulp-6.0/Src/gulp"), #Optional[str] = None,
     workdir: Optional[str] = None,
     keep_workdir: bool = False,
-    timeout: int = 1800,
+    timeout: int = 200000,
     add_c_if_2d: bool = True,
     gin_name: str = "job.gin",
     expected_cif: str = "job.cif",
@@ -250,6 +250,51 @@ def first_peak(two_theta: np.ndarray, intensity: np.ndarray, min_rel_height: flo
     idxs = np.where(mask)[0]
     return float(two_theta[idxs[0]])
 
+def find_top_peaks(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    min_rel_height: float = 0.05,
+    min_separation_deg: float = 0.30,
+    max_peaks: Optional[int] = None,
+    ) -> List[float]:
+    """
+    Return peak positions (2θ) using a simple local-maximum + greedy
+    non-overlap filter. Intensities are relative, so min_rel_height is fraction of max.
+    """
+    t = np.asarray(two_theta, float)
+    I = np.asarray(intensity, float)
+    if t.size < 3:
+        return []
+
+    # Normalize
+    Imax = float(I.max()) if I.max() > 0 else 1.0
+    if Imax == 0:
+        return []
+
+    # Candidate local maxima above threshold
+    thr = min_rel_height * Imax
+    cand_idx = []
+    for i in range(1, len(I) - 1):
+        if I[i] >= thr and I[i] >= I[i-1] and I[i] >= I[i+1]:
+            cand_idx.append(i)
+
+    if not cand_idx:
+        return []
+
+    # Sort candidates by intensity (desc), then greedily keep those separated
+    cand_idx.sort(key=lambda i: I[i], reverse=True)
+    selected: List[int] = []
+    for i in cand_idx:
+        if all(abs(t[i] - t[j]) >= min_separation_deg for j in selected):
+            selected.append(i)
+        if max_peaks is not None and len(selected) >= max_peaks:
+            break
+
+    # Return in ascending 2θ
+    selected.sort(key=lambda i: t[i])
+    return [float(t[i]) for i in selected]
+
+
 
 def scale_least_squares(y_obs: np.ndarray, y_calc: np.ndarray) -> float:
     """
@@ -427,8 +472,7 @@ class CreateStack:
         return txt_path
 
 
-    # ----- matching core -----
-
+        # ----- matching core -----
     def _simulate_and_match(
         self,
         atoms_in: Atoms,
@@ -441,18 +485,23 @@ class CreateStack:
         zero_shift_range: float = 0.2,
         zero_shift_step: float = 0.01,
         first_peak_window: float = 0.3,
+        # NEW: multi-peak matching controls
+        n_peaks_to_match: int = 5,
+        min_peaks_required: int = 3,
+        peak_tolerance_deg: float = 0.10,
+        peak_min_rel_height: float = 0.05,
+        peak_min_separation_deg: float = 0.30,
     ) -> Dict:
         """
-        Simulate PXRD, align to exp (0.2° grid), test small zero-shift,
-        scale analytically, compute conventional residuals and first-peak stats.
+        Simulate PXRD, align to exp (0.2° grid), scan zero-shift & scale analytically,
+        compute residuals, and test multi-peak matching: require that at least
+        `min_peaks_required` of the first `n_peaks_to_match` experimental peaks are found
+        within `peak_tolerance_deg`.
         """
-        # cif_in = self._write_cif(atoms_in, tag)
         atoms = optimize_with_gulp(atoms_in) if optimize else atoms_in.copy()
-        # cif_used = self._write_cif(atoms, f"{tag}_final")
         cif_used = os.path.join(self.output_dir, f"{self.base_name}_{tag}.cif")
 
-
-        # Simulate on dense grid then resample to 0.2°
+        # --- simulate & align ---
         sim_tth_raw, sim_I_raw = xrd_pattern(
             atoms,
             two_theta_min=sim_cfg.get("tth_min", np.min(exp_tth)),
@@ -461,51 +510,80 @@ class CreateStack:
             fwhm=sim_cfg.get("fwhm", 0.1),
             points=sim_cfg.get("points", 5000),
         )
-
-        # Ensure both on the same 0.2° grid as experimental
-        # (exp_tth, exp_I) are already 0.2° normalized at callsite
         sim_on_exp = np.interp(exp_tth, sim_tth_raw, sim_I_raw, left=0.0, right=0.0)
 
-        # zero-shift scan (professional quick alignment when not refining)
         shifts = np.arange(-zero_shift_range, zero_shift_range + 1e-12, zero_shift_step)
-        best = {
-            "Rwp": np.inf,
-            "shift": 0.0,
-            "scale": 1.0,
-            "ycalc": sim_on_exp.copy(),
-        }
+        best = {"Rwp": np.inf, "shift": 0.0, "scale": 1.0, "ycalc": sim_on_exp.copy()}
         for s in shifts:
             sim_shifted = np.interp(exp_tth, sim_tth_raw + s, sim_I_raw, left=0.0, right=0.0)
-            # optimal scale
             scale = scale_least_squares(exp_I, sim_shifted)
             ycalc = np.clip(scale * sim_shifted, 0.0, None)
             r = compute_r_factors(exp_I, ycalc, weights=None, P=0)
             if r["Rwp"] < best["Rwp"]:
                 best.update(shift=float(s), scale=float(scale), ycalc=ycalc, **r)
 
-        # full-pattern scores
         ycalc = best["ycalc"]
         r_full = compute_r_factors(exp_I, ycalc, weights=None, P=0)
         cos_sim = float(np.dot(exp_I, ycalc) / (np.linalg.norm(exp_I) * np.linalg.norm(ycalc) + 1e-12))
         pear_r = pearson_r(exp_I, ycalc)
 
-        # first-peak stats
+        # --- first-peak stats (keep your old metric) ---
         exp_first = first_peak(exp_tth, exp_I)
-        sim_first = first_peak(exp_tth, ycalc)  # after shift/scale on same grid
+        sim_first = first_peak(exp_tth, ycalc)
         d_first = abs(exp_first - sim_first) if (exp_first is not None and sim_first is not None) else None
 
-        # peak-window R (local Rp) around the first experimental peak
         Rp_peak = None
         if exp_first is not None:
             mask = peak_window_mask(exp_tth, exp_first, half_width=first_peak_window)
             if np.any(mask):
                 Rp_peak = compute_r_factors(exp_I[mask], ycalc[mask])["Rp"]
 
-        # Build report content
+        # --- NEW: multi-peak match on the aligned/processed profiles ---
+        exp_peaks = find_top_peaks(
+            exp_tth, exp_I,
+            min_rel_height=peak_min_rel_height,
+            min_separation_deg=peak_min_separation_deg,
+            max_peaks=n_peaks_to_match,
+        )
+        sim_peaks = find_top_peaks(
+            exp_tth, ycalc,
+            min_rel_height=peak_min_rel_height,
+            min_separation_deg=peak_min_separation_deg,
+            max_peaks=max(2 * n_peaks_to_match, n_peaks_to_match),  # be generous
+        )
+
+        per_peak_deltas: List[Optional[float]] = []
+        matched = 0
+        used_sim = set()
+        for t_exp in exp_peaks:
+            if not sim_peaks:
+                per_peak_deltas.append(None)
+                continue
+            # nearest simulated peak not yet used
+            diffs = [abs(t_exp - t_sim) if j not in used_sim else np.inf
+                    for j, t_sim in enumerate(sim_peaks)]
+            jbest = int(np.argmin(diffs))
+            d = diffs[jbest]
+            if np.isfinite(d):
+                per_peak_deltas.append(float(d))
+                if d <= peak_tolerance_deg:
+                    matched += 1
+                    used_sim.add(jbest)
+            else:
+                per_peak_deltas.append(None)
+
+        # Keep your original criterion, but ALSO require multi-peak consensus.
+        first_peak_ok = (d_first is not None) and (d_first <= tol_first_peak_deg)
+        multi_peak_ok = (matched >= min_peaks_required)
+
+        is_match = multi_peak_ok  # <- core new behavior
+        # If you prefer to keep legacy behavior as fallback, you could do:
+        # is_match = multi_peak_ok or first_peak_ok
+
+        # --- report ---
         report = []
         report.append("Report")
         report.append(f"Stacking: {tag}")
-        # report.append(f"CIF: {os.path.basename(cif_used)}")
         report.append(f"Zero shift applied (deg): {best['shift']:.3f}")
         report.append(f"Scale factor: {best['scale']:.6f}")
         if exp_first is not None:
@@ -514,6 +592,11 @@ class CreateStack:
             report.append(f"Computed first peak  (2θ): {sim_first:.4f} °")
         if d_first is not None:
             report.append(f"|Δ first peak|: {d_first:.4f} °")
+        report.append(f"Matched peaks (out of first {n_peaks_to_match}): {matched}")
+        if per_peak_deltas:
+            report.append("Per-peak |Δ2θ| for experimental first peaks:")
+            report.extend([f"  Peak {i+1}: {d:.4f} °" if d is not None else f"  Peak {i+1}: n/a"
+                        for i, d in enumerate(per_peak_deltas)])
         report.append(f"Rp (profile): {r_full['Rp']:.4f}")
         report.append(f"Rwp (weighted): {r_full['Rwp']:.4f}")
         report.append(f"Rexp: {r_full['Rexp']:.4f}")
@@ -527,11 +610,7 @@ class CreateStack:
         for t, I in zip(exp_tth, ycalc):
             report.append(f"{I:.6f} {t:.4f}")
 
-        # Write report file
         txt_path = self._write_report_txt(atoms, tag, report)
-
-        # Check match by first peak tolerance
-        is_match = (d_first is not None) and (d_first <= tol_first_peak_deg)
 
         plot_path = None
         if is_match:
@@ -539,29 +618,124 @@ class CreateStack:
             plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
             with open(txt_path, "a", encoding="utf-8") as f:
                 f.write("\n\nMatch found\n")
-            # self._write_cif(atoms, f"{tag}_final")
+            self._write_cif(atoms, f"{tag}_final")
+        # plot_path = os.path.join(self.output_dir, f"{self.base_name}_{tag}_pxrd_match.png")
+        # plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
 
         return dict(
-            tag=tag,
-            cif=cif_used,
-            txt=txt_path,
-            match=is_match,
-            first_peak_diff=d_first,
-            Rp=r_full["Rp"],
-            Rwp=r_full["Rwp"],
-            Rexp=r_full["Rexp"],
-            GoF=r_full["GoF"],
-            Rp_first_peak=Rp_peak,
-            cosine=cos_sim,
-            pearson=pear_r,
-            zero_shift=best["shift"],
-            scale=best["scale"],
-            plot=plot_path,
-        )
+        tag=tag,
+        cif=cif_used,
+        txt=txt_path,
+        match=is_match,
+        first_peak_diff=d_first,
+        Rp=r_full["Rp"],
+        Rwp=r_full["Rwp"],
+        Rexp=r_full["Rexp"],
+        GoF=r_full["GoF"],
+        Rp_first_peak=Rp_peak,
+        cosine=cos_sim,
+        pearson=pear_r,
+        zero_shift=best["shift"],
+        scale=best["scale"],
+        plot=plot_path,
+        matched_peaks=matched,
+        per_peak_deltas=per_peak_deltas,
+        exp_peaks=exp_peaks,
+        sim_peaks=sim_peaks,
+    )
 
     # ---------------------- public API ----------------------
 
     def search_best_stacking(
+        self,
+        exp_tth: np.ndarray,
+        exp_I: np.ndarray,
+        optimize: bool = False,
+        tol_first_peak_deg: float = 0.05,
+        slip_step: float = 0.5,
+        slip_max: float = 8.0,
+        sim_cfg: Optional[Dict] = None,
+        rwp_threshold: Optional[float] = None,
+        # NEW: multi-peak matching defaults (3 of first 5 within 0.10°)
+        n_peaks_to_match: int = 5,
+        min_peaks_required: int = 3,
+        peak_tolerance_deg: float = 0.10,
+        peak_min_rel_height: float = 0.05,
+        peak_min_separation_deg: float = 0.30,
+        ) -> Dict:
+        """
+            1) Enforce experimental grid to 0.2°
+            2) Try AA, AB, then slips (x, y, xy) at 0.5 Å up to 8 Å.
+            3) For each: simulate, zero-shift & scale against experimental 0.2° grid,
+            compute residuals & first-peak match; stop if |Δ2θ| ≤ tol.
+            Optionally also stop if Rwp ≤ rwp_threshold.
+            Returns the first structure that meets criteria; otherwise the last tried.
+        """
+        res_aa = self._simulate_and_match(
+            self.create_aa(), "aa", exp_tth, exp_I, optimize, tol_first_peak_deg, sim_cfg,
+            n_peaks_to_match=n_peaks_to_match,
+            min_peaks_required=min_peaks_required,
+            peak_tolerance_deg=peak_tolerance_deg,
+            peak_min_rel_height=peak_min_rel_height,
+            peak_min_separation_deg=peak_min_separation_deg,
+        )
+        if res_aa["match"] or (rwp_threshold is not None and res_aa["Rwp"] <= rwp_threshold):
+            return res_aa
+
+        res_ab = self._simulate_and_match(
+            self.create_ab(), "ab", exp_tth, exp_I, optimize, tol_first_peak_deg, sim_cfg,
+            n_peaks_to_match=n_peaks_to_match,
+            min_peaks_required=min_peaks_required,
+            peak_tolerance_deg=peak_tolerance_deg,
+            peak_min_rel_height=peak_min_rel_height,
+            peak_min_separation_deg=peak_min_separation_deg,
+        )
+        if res_ab["match"] or (rwp_threshold is not None and res_ab["Rwp"] <= rwp_threshold):
+            return res_ab
+
+        shifts = np.arange(slip_step, slip_max + 1e-9, slip_step)
+        last_res = res_ab
+        for s in shifts:
+            res_x = self._simulate_and_match(
+                self._make_shifted(s, 0.0), f"x_{s:.1f}", exp_tth, exp_I, optimize, tol_first_peak_deg, sim_cfg,
+                n_peaks_to_match=n_peaks_to_match,
+                min_peaks_required=min_peaks_required,
+                peak_tolerance_deg=peak_tolerance_deg,
+                peak_min_rel_height=peak_min_rel_height,
+                peak_min_separation_deg=peak_min_separation_deg,
+            )
+            last_res = res_x
+            if res_x["match"] or (rwp_threshold is not None and res_x["Rwp"] <= rwp_threshold):
+                return res_x
+
+            res_y = self._simulate_and_match(
+                self._make_shifted(0.0, s), f"y_{s:.1f}", exp_tth, exp_I, optimize, tol_first_peak_deg, sim_cfg,
+                n_peaks_to_match=n_peaks_to_match,
+                min_peaks_required=min_peaks_required,
+                peak_tolerance_deg=peak_tolerance_deg,
+                peak_min_rel_height=peak_min_rel_height,
+                peak_min_separation_deg=peak_min_separation_deg,
+            )
+            last_res = res_y
+            if res_y["match"] or (rwp_threshold is not None and res_y["Rwp"] <= rwp_threshold):
+                return res_y
+
+            res_xy = self._simulate_and_match(
+                self._make_shifted(s, s), f"xy_{s:.1f}", exp_tth, exp_I, optimize, tol_first_peak_deg, sim_cfg,
+                n_peaks_to_match=n_peaks_to_match,
+                min_peaks_required=min_peaks_required,
+                peak_tolerance_deg=peak_tolerance_deg,
+                peak_min_rel_height=peak_min_rel_height,
+                peak_min_separation_deg=peak_min_separation_deg,
+            )
+            last_res = res_xy
+            if res_xy["match"] or (rwp_threshold is not None and res_xy["Rwp"] <= rwp_threshold):
+                return res_xy
+
+        return last_res
+
+
+    def search_best_stacking2(
         self,
         exp_two_theta: np.ndarray,
         exp_intensity: np.ndarray,
