@@ -6,3 +6,11 @@ stacking_2d_systems/__pycache__/
 .vscode/
 dist/
 __pycache__
+tests/CuC3Ph-COF.csv
+tests/CuC3Ph-COF.xlsx
+tests/check_test.py
+tests/monolayer2.cif
+tests/pxrd_scan/
+tests/reg_cof_mono.cif
+tests/reg_cof_mono.xlsx
+

@@ -36,7 +36,6 @@ Install directly from [PyPI](https://pypi.org/project/stacking_2d_systems):
 ### From GitHub
 
     ```bash
-
         git clone https://github.com/bafgreat/stacking_2d_systems.git
         cd stacking_2d_systems
         pip install .
