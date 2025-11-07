@@ -345,13 +345,12 @@ def peak_window_mask(two_theta: np.ndarray, center: float, half_width: float = 0
     return (two_theta >= center - half_width) & (two_theta <= center + half_width)
 
 
-def plot_overlay_pxrd(exp_tth, exp_I, sim_tth, sim_I, out_png: str, title: str = "PXRD Comparison"):
+def plot_overlay_pxrd(exp_tth, exp_I, sim_tth, sim_I, out_png: str):
     plt.figure(figsize=(7, 4.5))
     plt.plot(exp_tth, exp_I, label="Experimental")
     plt.plot(sim_tth, sim_I, label="Computed")
     plt.xlabel(r"2$\theta$ (°)")
     plt.ylabel("Normalized intensity (a.u.)")
-    plt.title(title)
     plt.legend()
     plt.tight_layout()
     plt.savefig(out_png, dpi=200)
@@ -614,13 +613,15 @@ class CreateStack:
 
         plot_path = None
         if is_match:
-            plot_path = os.path.join(self.output_dir, f"{self.base_name}_{tag}_pxrd_match.png")
+            plot_path = os.path.join(self.output_dir, f"{self.base_name}_{tag}_pxrd_best_match.png")
             plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
             with open(txt_path, "a", encoding="utf-8") as f:
                 f.write("\n\nMatch found\n")
             self._write_cif(atoms, f"{tag}_final")
-        # plot_path = os.path.join(self.output_dir, f"{self.base_name}_{tag}_pxrd_match.png")
-        # plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
+        png_path = os.path.join(self.output_dir, f'{self.base_name}_pxrds_images')
+        os.makedirs(png_path, exist_ok=True)
+        plot_path = os.path.join(png_path , f"{self.base_name}_{tag}_pxrd.png")
+        plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
 
         return dict(
         tag=tag,
