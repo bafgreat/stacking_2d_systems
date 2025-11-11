@@ -220,7 +220,7 @@ def read_pxrd_asc(filename):
     for line in content:
         # Skip empty or non-numeric lines
         parts = line.strip().split()
-        if len(parts) == 2:
+        if len(parts) >= 2:
             try:
                 x, y = float(parts[0]), float(parts[1])
                 two_theta.append(x)
@@ -230,9 +230,13 @@ def read_pxrd_asc(filename):
 
     two_theta = np.array(two_theta)
     intensity = np.array(intensity)
-    data['intensity'] = intensity
-    data['two_theta'] = two_theta
-    return data
+    df = pd.DataFrame({
+    "two_theta": two_theta,
+    "intensity": intensity})
+    # data['intensity'] = intensity
+    # data['two_theta'] = two_theta
+    # df = pd.DataFrame(data)
+    return df
 
 
 def load_data(filename):
@@ -253,7 +257,7 @@ def load_data(filename):
     elif file_ext == 'xlsx':
         data = pd.read_excel(filename)
 
-    elif file_ext ["ASC", "asc"]:
+    elif file_ext in ["ASC", "asc"]:
         data=read_pxrd_asc(filename)
     else:
         data = get_contents(filename)

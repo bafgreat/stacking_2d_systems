@@ -1,5 +1,6 @@
 # stacking_2d_system/slip_layers.py
 import os
+import re
 import glob
 import shutil
 from math import sqrt
@@ -12,6 +13,7 @@ from ase.io import read, write
 from ase.atoms import Atoms
 from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
+from mofstructure import mofdeconstructor
 
 try:
     from  pymatgen.analysis.diffraction.xrd import XRDCalculator
@@ -25,7 +27,148 @@ import matplotlib.pyplot as plt
 adaptor = AseAtomsAdaptor()
 # ---------------------- External hooks ----------------------
 
+def create_layer(ase_atom, interlayer_dist):
+    atom_neighbors, _ = mofdeconstructor.compute_ase_neighbour(ase_atom)
+    fragments = mofdeconstructor.connected_components(atom_neighbors)
+    if len(fragments) == 1:
+        cell = ase_atom.get_cell().copy()
+        cell[2, 2] = interlayer_dist
+        ase_atom.set_cell(cell, scale_atoms=False)
+        bilayer = ase_atom * (1, 1, 2)
+        x, y, z =  ase_atom.cell.lengths().tolist()
+        return bilayer, x, y, z, len(ase_atom)
+    elif len(fragments) == 2 and all(len(sublist) == len(fragments[0]) for sublist in fragments):
+        cell = ase_atom.get_cell().copy()
+        x, y, z =  ase_atom.cell.lengths().tolist()
+        bilayer = ase_atom
+        return ase_atom, x, y, z, len(fragments[0])
+    elif len(fragments) == 2 and not all(len(fragments[0]) for sublist in fragments):
+        print("Multi components with different length detected. Will treat as monolayer or stop calculation ")
+        cell = ase_atom.get_cell().copy()
+        cell[2, 2] = interlayer_dist
+        ase_atom.set_cell(cell, scale_atoms=False)
+        bilayer = ase_atom * (1, 1, 2)
+        x, y, z =  ase_atom.cell.lengths().tolist()
+        return bilayer, x, y, z, len(ase_atom)
+    else:
+        raise("Multi components detected. Check structure")
+
+
+def find_latest_gulp(base_dir: Optional[str] = None) -> Optional[str]:
+    """
+    Search for the latest GULP executable in the given base directory.
+    Example expected paths: $HOME/src/gulp-6.0/Src/gulp
+    """
+    base_dir = base_dir or os.path.expandvars("$HOME/src")
+    pattern = os.path.join(base_dir, "gulp-*", "Src", "gulp")
+    candidates = glob.glob(pattern)
+
+    if not candidates:
+        return None
+
+    # Extract version numbers safely (e.g., "gulp-6.2" -> (6,2))
+    def version_key(path):
+        match = re.search(r"gulp-(\d+)(?:\.(\d+))?", path)
+        if match:
+            major = int(match.group(1))
+            minor = int(match.group(2) or 0)
+            return (major, minor)
+        return (0, 0)
+
+    # Sort candidates by version
+    candidates.sort(key=version_key, reverse=True)
+    return candidates[0]  # latest
+
 def optimize_with_gulp(
+    ase_atom: Atoms,
+    gulp_exe: Optional[str] = None,
+    workdir: Optional[str] = None,
+    keep_workdir: bool = False,
+    timeout: int = 300000,
+    add_c_if_2d: bool = True,
+    gin_name: str = "job.gin",
+    expected_cif: str = "job.cif",
+) -> Atoms:
+    """
+    Optimize a structure with GULP and return the optimized ASE Atoms.
+    """
+
+    # Resolve GULP executable
+    gulp_exe = (
+        gulp_exe
+        or os.environ.get("GULP_EXE")
+        or find_latest_gulp()  # ← find the latest version automatically
+        or "gulp"  # fallback to PATH
+    )
+
+    if not shutil.which(gulp_exe) and not os.path.isfile(gulp_exe):
+        raise RuntimeError(f"GULP executable not found: {gulp_exe}")
+
+    # Working directory setup
+    owned_tmp = False
+    if workdir is None:
+        workdir = tempfile.mkdtemp(prefix="gulp_run_")
+        owned_tmp = True
+    os.makedirs(workdir, exist_ok=True)
+
+    try:
+        gin_path = os.path.join(workdir, gin_name)
+        gout_path = os.path.join(workdir, "job.gout")
+        got_path = os.path.join(workdir, "job.got")
+
+        bonds, mmtypes = mmanalysis.analyze_mm(ase_atom)
+
+        try:
+            mmanalysis.write_gin(
+                gin_path, ase_atom, bonds, mmtypes,
+                add_c_if_2d=add_c_if_2d,
+                output_cif=os.path.join(workdir, expected_cif)
+            )
+        except TypeError:
+            mmanalysis.write_gin(gin_path, ase_atom, bonds, mmtypes, add_c_if_2d=add_c_if_2d)
+
+
+        with open(gin_path, "r") as fin, open(gout_path, "w") as fout:
+            proc = subprocess.run(
+                [gulp_exe],
+                stdin=fin,
+                stdout=fout,
+                stderr=subprocess.STDOUT,
+                cwd=workdir,
+                check=False,
+                timeout=timeout,
+            )
+
+        if proc.returncode != 0:
+            tail = ""
+            try:
+                with open(gout_path, "r") as f:
+                    tail = "".join(f.readlines()[-200:])
+            except Exception:
+                pass
+            raise RuntimeError(f"GULP failed (exit code {proc.returncode}).\n{tail}")
+
+        candidate = os.path.join(workdir, expected_cif)
+        if not os.path.isfile(candidate):
+            cifs = glob.glob(os.path.join(workdir, "*.cif"))
+            if cifs:
+                candidate = max(cifs, key=os.path.getmtime)
+            else:
+                raise RuntimeError("No CIF file produced by GULP.")
+
+        opt_atoms = read(candidate)
+
+        if owned_tmp and not keep_workdir:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+        return opt_atoms
+
+    finally:
+        if owned_tmp and not keep_workdir:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+
+def optimize_with_gulp2(
     ase_atom: Atoms,
     gulp_exe = os.path.expandvars("$HOME/src/gulp-6.0/Src/gulp"), #Optional[str] = None,
     workdir: Optional[str] = None,
@@ -346,12 +489,13 @@ def peak_window_mask(two_theta: np.ndarray, center: float, half_width: float = 0
 
 
 def plot_overlay_pxrd(exp_tth, exp_I, sim_tth, sim_I, out_png: str):
-    plt.figure(figsize=(7, 4.5))
-    plt.plot(exp_tth, exp_I, label="Experimental")
-    plt.plot(sim_tth, sim_I, label="Computed")
-    plt.xlabel(r"2$\theta$ (°)")
-    plt.ylabel("Normalized intensity (a.u.)")
-    plt.legend()
+    offset = 1.0
+    plt.figure(figsize=(8, 5))
+    plt.plot(exp_tth, exp_I + offset, ls='-', color='red', lw=1.5, label="Experimental")
+    plt.plot(sim_tth, sim_I, color='blue', ls='--', lw=1.5, label="Simulated")
+    plt.xlabel(r"2$\theta$ (°)", fontsize=12)
+    plt.ylabel("Normalized intensity (a.u.)", fontsize=12)
+    plt.legend(loc='upper right', frameon=False)
     plt.tight_layout()
     plt.savefig(out_png, dpi=200)
     plt.close()
@@ -373,23 +517,26 @@ class CreateStack:
 
         self.base_name = os.path.basename(filename).split(".")[0]
         self.monolayer = read(filename).copy()
-        cell = self.monolayer.get_cell().copy()
-        cell[2, 2] = interlayer_dist
-        self.monolayer.set_cell(cell, scale_atoms=False)
-        self.bilayer = self.monolayer * (1, 1, 2)
+        # cell = self.monolayer.get_cell().copy()
+        # cell[2, 2] = interlayer_dist
+        # self.monolayer.set_cell(cell, scale_atoms=False)
+        bilayer, x, y, z, length_monolayer = create_layer( self.monolayer, interlayer_dist)
+        # self.bilayer = self.monolayer * (1, 1, 2)
+        self.bilayer = bilayer
+        self.length_monolayer = length_monolayer
 
-        x, y, z = self.monolayer.cell.lengths().tolist()
+        # x, y, z = self.monolayer.cell.lengths().tolist()
         self.x, self.y, self.z = x, y, z
 
     # ----- geometry builders -----
 
-    def _make_shifted(self, dx: float, dy: float, dz: float = 0.0) -> Atoms:
+    def _make_shifted(self, length_monolayer: int, dx: float, dy: float, dz: float = 0.0) -> Atoms:
         atoms = self.bilayer.copy()
-        n = len(self.monolayer)
+        # n = len(self.monolayer)
         pos = atoms.get_positions()
-        pos[n:, 0] += dx
-        pos[n:, 1] += dy
-        pos[n:, 2] += dz
+        pos[length_monolayer:, 0] += dx
+        pos[length_monolayer:, 1] += dy
+        pos[length_monolayer:, 2] += dz
         atoms.set_positions(pos)
         return atoms
 
@@ -403,7 +550,7 @@ class CreateStack:
         cell_b = float(np.linalg.norm(b_vec))
         dx = cell_a / 2.0
         dy = (cell_b / 6.0) * sqrt(3.0)
-        return self._make_shifted(dx, dy, 0.0)
+        return self._make_shifted(self.length_monolayer , dx, dy, 0.0)
 
     # ----- IO helpers -----
 
@@ -463,7 +610,7 @@ class CreateStack:
             for line in report_lines:
                 lines.append(f"  {line}")
             lines.append("")
-            lines.append(f" End of Report for {self.base_name}\n")
+            lines.append(f" End of Report for {self.base_name}_{tag}\n")
 
         with open(txt_path, "a", encoding="utf-8") as f:
             f.write("\n".join(lines))
@@ -485,7 +632,7 @@ class CreateStack:
         zero_shift_step: float = 0.01,
         first_peak_window: float = 0.3,
         # NEW: multi-peak matching controls
-        n_peaks_to_match: int = 5,
+        n_peaks_to_match: int = 10,
         min_peaks_required: int = 3,
         peak_tolerance_deg: float = 0.10,
         peak_min_rel_height: float = 0.05,
@@ -614,14 +761,14 @@ class CreateStack:
         plot_path = None
         if is_match:
             plot_path = os.path.join(self.output_dir, f"{self.base_name}_{tag}_pxrd_best_match.png")
-            plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
+            plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path)
             with open(txt_path, "a", encoding="utf-8") as f:
                 f.write("\n\nMatch found\n")
             self._write_cif(atoms, f"{tag}_final")
         png_path = os.path.join(self.output_dir, f'{self.base_name}_pxrds_images')
         os.makedirs(png_path, exist_ok=True)
         plot_path = os.path.join(png_path , f"{self.base_name}_{tag}_pxrd.png")
-        plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path, title=f"PXRD: {self.base_name} ({tag})")
+        plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, plot_path)
 
         return dict(
         tag=tag,
