@@ -489,8 +489,8 @@ def peak_window_mask(two_theta: np.ndarray, center: float, half_width: float = 0
 
 
 def plot_overlay_pxrd(exp_tth, exp_I, sim_tth, sim_I, out_png: str):
-    offset = 1.0
-    plt.figure(figsize=(8, 5))
+    offset = 3.0
+    plt.figure(figsize=(9, 6))
     plt.plot(exp_tth, exp_I + offset, ls='-', color='red', lw=1.5, label="Experimental")
     plt.plot(sim_tth, sim_I, color='blue', ls='--', lw=1.5, label="Simulated")
     plt.xlabel(r"2$\theta$ (°)", fontsize=12)
@@ -530,13 +530,13 @@ class CreateStack:
 
     # ----- geometry builders -----
 
-    def _make_shifted(self, length_monolayer: int, dx: float, dy: float, dz: float = 0.0) -> Atoms:
+    def _make_shifted(self, dx: float, dy: float, dz: float = 0.0) -> Atoms:
         atoms = self.bilayer.copy()
-        # n = len(self.monolayer)
+        n = self.length_monolayer
         pos = atoms.get_positions()
-        pos[length_monolayer:, 0] += dx
-        pos[length_monolayer:, 1] += dy
-        pos[length_monolayer:, 2] += dz
+        pos[n:, 0] += dx
+        pos[n:, 1] += dy
+        pos[n:, 2] += dz
         atoms.set_positions(pos)
         return atoms
 
@@ -550,7 +550,7 @@ class CreateStack:
         cell_b = float(np.linalg.norm(b_vec))
         dx = cell_a / 2.0
         dy = (cell_b / 6.0) * sqrt(3.0)
-        return self._make_shifted(self.length_monolayer , dx, dy, 0.0)
+        return self._make_shifted(dx, dy, 0.0)
 
     # ----- IO helpers -----
 
