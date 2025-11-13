@@ -45,6 +45,8 @@ Install directly from [PyPI](https://pypi.org/project/stacking_2d_systems):
 
 ### Command-Line Interface (CLI)
 
+### 1. Static build
+
 The stacking_2d_systems package provides a user-friendly command-line tool called create-stack for generating stacking configurations without needing to write Python code.
 
     ```bash
@@ -110,6 +112,90 @@ To automatically create AB, AA, and all custom translations along x, y, and xy
         ```
 
 This code will generate all stacking configurations. At the maximum length for the custom translations will be half the size of the lattice length. i.e for translation along x, the maximum length is a/2.0 and b/2.0 along y and a+b/2.0 for xy.
+
+### 2. Layer Builder & PXRD Stacking Matcher
+
+One can quickly build and match layer stack to experimental pxrd by running the below commandline argument.
+
+    ```bash
+
+        build-layer -i pxrd.xlsx -c filename.cif
+    ```
+
+If you have Gulp installed in `$HOME/src/gulp-6*/SRC/gulp`. Then you can turn on the optimisation flag. Reach out to me if you need help with setting this up.
+
+    ```bash
+
+        build-layer -i pxrd.xlsx -c filename.cif --optimize
+    ```
+
+### build-layer  Command-Line Options
+
+build-layer [-h] --input INPUT --cif CIF
+        [--interlayer INTERLAYER] [--outdir OUTDIR]
+        [--optimize] [--slipstep SLIPSTEP]
+        [--slipmax SLIPMAX] [--fwhm FWHM]
+        [--rwp RWP]
+
+#### build-layer Required Arguments
+
+| Flag            | Description                                  |
+| --------------- | -------------------------------------------- |
+| `-i`, `--input` | PXRD experimental data file (CSV, XLSX, TXT) |
+| `-c`, `--cif`   | CIF file of the monolayer COF structure      |
+
+#### build-layer Optional Arguments
+
+| Flag                 | Default   | Description                                         |
+| -------------------- | --------- | --------------------------------------------------- |
+| `-d`, `--interlayer` | 4.0       | Interlayer distance (Å) used when building layers   |
+| `-o`, `--outdir`     | pxrd_scan | Output directory for simulated patterns and results |
+| `--optimize`         | False     | Enable GULP optimisation of generated COF stackings |
+| `--slipstep`         | 0.5       | Slip increment (Å) between stacking trials          |
+| `--slipmax`          | 8.0       | Maximum slip (Å) explored                           |
+| `--fwhm`             | 0.10      | FWHM used in PXRD simulation                        |
+| `--rwp`              | None      | Rwp threshold for early stopping (e.g. `0.10`)      |
+
+#### build-layer functions
+
+- Load experimental PXRD from **CSV / TXT / /ACS/xy/XLSX**.
+- Read monolayer or dilayer **CIF** structures.
+- Automatically generate and stack 2D layers.
+- Search over slip parameters to minimise **Rwp**.
+- Optional **GULP optimisation** of each stacking candidate.
+
+## Extraction of cifs
+
+The commandline argument belows is usefull to extract the  AA, AB, best slip, and optionally user-specified stacking configurations from PXRD similarity reports and writes the corresponding structures as CIF files.
+
+    ```bash
+        extract_cifs --file PATH_TO_REPORT
+    ```
+e.g
+
+    ```bash
+        extract_cifs  -f BPDA.txt
+    ```
+    
+### 1. Optional: Extract One or More Stackings
+
+--stacked / -s
+Specify one or more stacking types to extract. Supports comma-separated lists.
+Examples:
+Extract a single stacking:
+
+    ```bash
+        extract_cifs  -f BPDA.txt -s x_2.0
+    ```
+### 2. Optional: ONLY write selected stackings
+
+--stacked-only
+Use this flag to output ONLY the stacking types specified, skipping AA, AB, and best slip.
+Example:
+
+    ```bash
+        extract_cifs -f BPDA.txt -s x_2.0 --stacked-only
+    ```
 
 ## Library Usage
 

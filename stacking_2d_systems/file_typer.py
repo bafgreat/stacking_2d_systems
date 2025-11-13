@@ -186,6 +186,19 @@ def read_zip(zip_file):
     content.close()
     return content
 
+def get_section(contents, start_key, stop_key, start_offset=0, stop_offset=0):
+    all_start_indices = []
+    for i, line in enumerate(contents):
+        if  start_key in line:
+            all_start_indices.append(i + start_offset)
+    start_index = all_start_indices[-1]
+    for i in range(start_index, len(contents)):
+        line = contents[i]
+        if stop_key in line:
+            stop_index = i + 1 + stop_offset
+            break
+    data = contents[start_index:stop_index]
+    return  data
 
 def convert_numpy_types(data):
     '''

@@ -966,3 +966,135 @@ def pearson_r(a: np.ndarray, b: np.ndarray) -> float:
     if denom == 0:
         return 0.0
     return float(np.dot(a, b) / denom)
+
+
+def simulate_and_plot_pxrd_from_exp(
+    ase_atom: Atoms,
+    exp_two_theta: np.ndarray,
+    exp_intensity: np.ndarray,
+    out_png: str = "pxrd_overlay.png",
+    sim_cfg: Optional[Dict] = None,
+    normalize_exp: bool = True,
+    zero_shift_range: float = 0.20,
+    zero_shift_step: float = 0.01,
+    save_csv: Optional[str] = None,
+) -> Dict:
+    """
+    Simulate PXRD for an ASE Atoms object and overlay it with experimental data.
+
+    Steps
+    -----
+    1) Ensure experimental grid is 0.2° (resamples if needed) and (optionally) normalize to max=1.
+    2) Simulate PXRD via pymatgen's XRDCalculator (broadened using xrd_pattern).
+    3) Scan a small zero shift; scale simulated intensities by least squares.
+    4) Plot overlay and (optionally) save a CSV with aligned arrays.
+
+    Parameters
+    ----------
+    ase_atom : Atoms
+        Structure to simulate.
+    exp_two_theta, exp_intensity : array-like
+        Experimental 2θ and intensity arrays.
+    out_png : str
+        Output path for the overlay PNG.
+    sim_cfg : dict, optional
+        Keys: tth_min, tth_max, wavelength, fwhm, points (passed to xrd_pattern).
+    normalize_exp : bool
+        If True, normalize experimental intensities to max=1 after resampling.
+    zero_shift_range : float
+        Scan ± this many degrees for best zero shift.
+    zero_shift_step : float
+        Step size for zero-shift scan.
+    save_csv : str or None
+        If provided, write a CSV with columns: two_theta, I_exp, I_sim_best.
+
+    Returns
+    -------
+    dict
+        {
+          "two_theta": exp_tth (0.2° grid),
+          "I_exp": normalized experimental intensities,
+          "I_sim": best-fit simulated intensities on the same grid,
+          "zero_shift": best zero shift (deg),
+          "scale": scale factor,
+          "Rp", "Rwp", "Rexp", "GoF": profile statistics,
+          "cosine": cosine similarity,
+          "pearson": Pearson r,
+          "png": out_png,
+          "csv": save_csv or None
+        }
+    """
+    sim_cfg = sim_cfg or {}
+
+    # -- 1) Put experimental data on a 0.2° grid
+    exp_tth, exp_I, _ = ensure_exp_step_0p2(np.asarray(exp_two_theta), np.asarray(exp_intensity))
+    if normalize_exp and exp_I.max() > 0:
+        exp_I = exp_I / exp_I.max()
+
+    # -- 2) Simulate PXRD for the structure
+    tth_min = sim_cfg.get("tth_min", float(np.min(exp_tth)))
+    tth_max = sim_cfg.get("tth_max", float(np.max(exp_tth)))
+    wavelength = sim_cfg.get("wavelength", 1.5406)
+    fwhm = sim_cfg.get("fwhm", 0.10)
+    points = sim_cfg.get("points", 5000)
+
+    sim_tth_raw, sim_I_raw = xrd_pattern(
+        ase_atom,
+        two_theta_min=tth_min,
+        two_theta_max=tth_max,
+        wavelength=wavelength,
+        fwhm=fwhm,
+        points=points,
+    )
+
+    # Interpolate simulated pattern to the experimental (0.2°) grid
+    sim_on_exp = np.interp(exp_tth, sim_tth_raw, sim_I_raw, left=0.0, right=0.0)
+
+    # -- 3) Scan zero shift & compute least-squares scale
+    shifts = np.arange(-zero_shift_range, zero_shift_range + 1e-12, zero_shift_step)
+    best = {"Rwp": np.inf, "shift": 0.0, "scale": 1.0, "ycalc": sim_on_exp.copy()}
+
+    for s in shifts:
+        shifted = np.interp(exp_tth, sim_tth_raw + s, sim_I_raw, left=0.0, right=0.0)
+        scale = scale_least_squares(exp_I, shifted)
+        ycalc = np.clip(scale * shifted, 0.0, None)
+        r = compute_r_factors(exp_I, ycalc)
+        if r["Rwp"] < best["Rwp"]:
+            best.update(shift=float(s), scale=float(scale), ycalc=ycalc, **r)
+
+    ycalc = best["ycalc"]
+    r_full = compute_r_factors(exp_I, ycalc)
+    cos_sim = float(np.dot(exp_I, ycalc) / (np.linalg.norm(exp_I) * np.linalg.norm(ycalc) + 1e-12))
+    pear = pearson_r(exp_I, ycalc)
+
+    # -- 4) Plot overlay and optionally save CSV
+    plot_overlay_pxrd(exp_tth, exp_I, exp_tth, ycalc, out_png)
+
+    if save_csv is not None:
+        try:
+            import csv
+            with open(save_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["two_theta_deg", "I_exp_norm", "I_sim_best"])
+                for t, ie, ic in zip(exp_tth, exp_I, ycalc):
+                    writer.writerow([f"{t:.4f}", f"{ie:.6f}", f"{ic:.6f}"])
+        except Exception:
+            # If CSV save fails, just continue—PNG and return dict still useful
+            save_csv = None
+
+    return dict(
+        two_theta=exp_tth,
+        I_exp=exp_I,
+        I_sim=ycalc,
+        zero_shift=best["shift"],
+        scale=best["scale"],
+        Rp=r_full["Rp"],
+        Rwp=r_full["Rwp"],
+        Rexp=r_full["Rexp"],
+        GoF=r_full["GoF"],
+        cosine=cos_sim,
+        pearson=pear,
+        png=out_png,
+        csv=save_csv,
+        cfg=dict(wavelength=wavelength, fwhm=fwhm, tth_min=tth_min, tth_max=tth_max, points=points),
+    )

@@ -23,4 +23,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 create-stack = "stacking_2d_systems.cli:main"
+build-layer = "stacking_2d_systems.build_cof:main"
+extract_cifs = "stacking_2d_systems.extract_cifs:main"
 

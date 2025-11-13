@@ -14,3 +14,7 @@ tests/pxrd_scan/
 tests/reg_cof_mono.cif
 tests/reg_cof_mono.xlsx
 
+tests/BPDA.txt
+tests/build_cofs.py
+tests/reg_cof_mono2.cif
+
