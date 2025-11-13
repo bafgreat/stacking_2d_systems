@@ -176,7 +176,7 @@ e.g
     ```bash
         extract_cifs  -f BPDA.txt
     ```
-    
+
 ### 1. Optional: Extract One or More Stackings
 
 --stacked / -s
@@ -187,6 +187,7 @@ Extract a single stacking:
     ```bash
         extract_cifs  -f BPDA.txt -s x_2.0
     ```
+
 ### 2. Optional: ONLY write selected stackings
 
 --stacked-only
@@ -197,6 +198,19 @@ Example:
         extract_cifs -f BPDA.txt -s x_2.0 --stacked-only
     ```
 
+## Plot PXRD
+
+To quickly plot adjacent PXRD
+
+    ```bash
+        plot_pxrd  -c filename.cif -p pxrd.fmt
+    ```
+fmt
+    -- csv
+    -- txt
+    -- excel
+    -- asc
+    
 ## Library Usage
 
 To have full control over the stacking process, the CreateStack class can be used directly in Python scripts.
