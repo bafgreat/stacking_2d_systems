@@ -84,7 +84,7 @@ def optimize_with_gulp(
     gulp_exe: Optional[str] = None,
     workdir: Optional[str] = None,
     keep_workdir: bool = False,
-    timeout: int = 300000,
+    timeout: int = 3000000,
     add_c_if_2d: bool = True,
     gin_name: str = "job.gin",
     expected_cif: str = "job.cif",
@@ -509,7 +509,7 @@ class CreateStack:
     and evaluate both first-peak match and full-pattern residuals.
     """
 
-    def __init__(self, filename: str, interlayer_dist: float = 4.0, output_dir: str = "."):
+    def __init__(self, filename: str, interlayer_dist: float = 4.5, output_dir: str = "."):
         self.filename = filename
         self.interlayer_dist = interlayer_dist
         self.output_dir = output_dir

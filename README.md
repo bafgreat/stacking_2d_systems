@@ -210,7 +210,27 @@ fmt
     -- txt
     -- excel
     -- asc
-    
+
+## Symmetrise structure
+
+To symmerise a structure to get the smallest repeatable.
+
+    ```bash
+        get_primitive_structure input_cif outfile_cif
+    ```
+    -- input_cif: File to symmetrize
+    -- out_file: Save filename
+
+## Symmetrise structure using MATID
+
+To symmerise a structure to get the smallest repeatable.
+
+    ```bash
+        get_primitive_matid input_cif outfile_cif
+    ```
+    -- input_cif: File to symmetrize
+    -- out_file: Save filename
+
 ## Library Usage
 
 To have full control over the stacking process, the CreateStack class can be used directly in Python scripts.

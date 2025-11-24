@@ -251,6 +251,35 @@ def read_pxrd_asc(filename):
     # df = pd.DataFrame(data)
     return df
 
+def read_pxrd_xy(filename):
+    """
+    Reads experimental PXRD data from a .ASC file with two columns:
+    2θ (degrees) and intensity (counts).
+    """
+    two_theta = []
+    intensity = []
+    data = {}
+    content = get_contents(filename)
+    for line in content:
+        # Skip empty or non-numeric lines
+        parts = line.strip().split()
+        if len(parts) >= 2:
+            try:
+                x, y = float(parts[0]), float(parts[1])
+                two_theta.append(x)
+                intensity.append(y)
+            except ValueError:
+                continue
+
+    two_theta = np.array(two_theta)
+    intensity = np.array(intensity)
+    df = pd.DataFrame({
+    "two_theta": two_theta,
+    "intensity": intensity})
+    # data['intensity'] = intensity
+    # data['two_theta'] = two_theta
+    # df = pd.DataFrame(data)
+    return df
 
 def load_data(filename):
     '''
@@ -272,6 +301,8 @@ def load_data(filename):
 
     elif file_ext in ["ASC", "asc"]:
         data=read_pxrd_asc(filename)
+    elif file_ext in ["xy", "XY"]:
+        data=read_pxrd_xy(filename)
     else:
         data = get_contents(filename)
     return data

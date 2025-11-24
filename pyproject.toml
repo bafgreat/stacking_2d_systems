@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "stacking_2d_systems"
-version = "0.1.3"
+version = "0.1.4"
 description = "A python package for creating stack layers of 2D systems."
 authors = ["Dinga Wonanke <bafgreat@gmail.com>"]
 readme = "README.md"
@@ -13,6 +13,7 @@ ase = "^3.23.0"
 pytest = "^8.3.3"
 gulp_setup = "^0.1.5"
 openpyxl = "^3.1.5"
+matid = "^2.1.6"
 
 
 
@@ -26,4 +27,7 @@ create-stack = "stacking_2d_systems.cli:main"
 build-layer = "stacking_2d_systems.build_cof:main"
 extract_cifs = "stacking_2d_systems.extract_cifs:main"
 plot_pxrd = "stacking_2d_systems.plot_xrd:main"
+xrd_from_atoms ="stacking_2d_systems.xrd_from_atoms:main"
+get_primitive_structure="stacking_2d_systems.get_reduced:main"
+get_primitive_matid="stacking_2d_systems.get_reduced_matid:main"
 
